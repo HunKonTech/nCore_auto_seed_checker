@@ -69,6 +69,11 @@ func (c *Checker) createContext() (context.Context, context.CancelFunc) {
 		chromedp.NoFirstRun,
 		chromedp.NoDefaultBrowserCheck,
 		chromedp.Headless,
+		chromedp.DisableGPU,
+		chromedp.NoSandbox,
+	}
+	if p := os.Getenv("CHROME_PATH"); p != "" {
+		opts = append(opts, chromedp.ExecPath(p))
 	}
 	// If you wanted to see the browser, you'd remove Headless. For now default is headless.
 
@@ -82,7 +87,7 @@ func (c *Checker) createContext() (context.Context, context.CancelFunc) {
 	}
 
 	// Set timeout
-	ctx, cancelTimeout := context.WithTimeout(ctx, 240*time.Second)
+	ctx, cancelTimeout := context.WithTimeout(ctx, 600*time.Second)
 
 	return ctx, func() {
 		cancelTimeout()
@@ -92,22 +97,34 @@ func (c *Checker) createContext() (context.Context, context.CancelFunc) {
 
 func (c *Checker) login(ctx context.Context) error {
 	c.Logger.Println("Attempting to log in...")
-	var body string
+	var body, url string
 	err := chromedp.Run(ctx,
 		chromedp.Navigate(loginUrl),
 		chromedp.WaitReady(`#nev`, chromedp.ByID),
 		chromedp.SendKeys(`#nev`, c.User, chromedp.ByID),
 		chromedp.SendKeys(`[name="pass"]`, c.Pass, chromedp.ByQuery),
 		chromedp.Click(`[type="submit"]`, chromedp.ByQuery),
-		chromedp.WaitReady(`a[href*="hitnrun"]`, chromedp.ByQuery),
+		chromedp.Sleep(10*time.Second),
+		chromedp.Location(&url),
 		chromedp.OuterHTML(`html`, &body, chromedp.ByQuery),
 	)
 	if err != nil {
 		return err
 	}
+	c.Logger.Println("After submit URL:", url)
+	_ = os.WriteFile("login_debug.html", []byte(body), 0644)
 
-	if !strings.Contains(body, c.User) {
-		return fmt.Errorf("username not found on page after login")
+	// nCore may redirect to a shop/ad page after login; go straight to hitnrun.
+	if err := chromedp.Run(ctx,
+		chromedp.Navigate(activityUrl),
+		chromedp.WaitReady(`body`, chromedp.ByQuery),
+		chromedp.Location(&url),
+		chromedp.OuterHTML(`html`, &body, chromedp.ByQuery),
+	); err != nil {
+		return err
+	}
+	if strings.Contains(url, "login.php") || !strings.Contains(body, c.User) {
+		return fmt.Errorf("login failed, landed on %s (see login_debug.html)", url)
 	}
 	c.Logger.Println("Login successful.")
 	return nil
