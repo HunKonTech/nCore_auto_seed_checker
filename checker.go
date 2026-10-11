@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/chromedp/cdproto/cdp"
+	"github.com/chromedp/cdproto/network"
 	"github.com/chromedp/chromedp"
 	"golang.org/x/net/html"
 )
@@ -96,8 +97,27 @@ func (c *Checker) createContext() (context.Context, context.CancelFunc) {
 }
 
 func (c *Checker) login(ctx context.Context) error {
-	c.Logger.Println("Attempting to log in...")
 	var body, url string
+	if raw := os.Getenv("NCORE_COOKIE"); raw != "" {
+		c.Logger.Println("Logging in with session cookie...")
+		err := chromedp.Run(ctx, chromedp.ActionFunc(func(ctx context.Context) error {
+			for _, part := range strings.Split(raw, ";") {
+				kv := strings.SplitN(strings.TrimSpace(part), "=", 2)
+				if len(kv) != 2 {
+					continue
+				}
+				if err := network.SetCookie(kv[0], kv[1]).WithDomain("ncore.pro").WithPath("/").WithSecure(true).Do(ctx); err != nil {
+					return err
+				}
+			}
+			return nil
+		}))
+		if err != nil {
+			return err
+		}
+		return c.verifyLogin(ctx)
+	}
+	c.Logger.Println("Attempting to log in...")
 	err := chromedp.Run(ctx,
 		chromedp.Navigate(loginUrl),
 		chromedp.WaitReady(`#nev`, chromedp.ByID),
@@ -115,6 +135,11 @@ func (c *Checker) login(ctx context.Context) error {
 	_ = os.WriteFile("login_debug.html", []byte(body), 0644)
 
 	// nCore may redirect to a shop/ad page after login; go straight to hitnrun.
+	return c.verifyLogin(ctx)
+}
+
+func (c *Checker) verifyLogin(ctx context.Context) error {
+	var body, url string
 	if err := chromedp.Run(ctx,
 		chromedp.Navigate(activityUrl),
 		chromedp.WaitReady(`body`, chromedp.ByQuery),
