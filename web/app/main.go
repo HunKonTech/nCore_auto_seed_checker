@@ -29,6 +29,7 @@ var (
 	shownOutputDir, shownInterval string
 
 	frameImg   js.Value
+	previewOn  bool
 	lastMoveMs float64
 )
 
@@ -206,6 +207,11 @@ func handle(raw string) {
 		if json.Unmarshal(env.Data, &f) == nil {
 			drawFrame(f)
 		}
+	case api.MsgRunFrame:
+		var f api.Frame
+		if json.Unmarshal(env.Data, &f) == nil {
+			drawRunFrame(f)
+		}
 	case api.MsgNotice:
 		var n api.Notice
 		if json.Unmarshal(env.Data, &n) == nil {
@@ -251,6 +257,24 @@ func selectTab(name string) {
 
 func setupDashboard() {
 	onClick("runNow", func() { send(api.MsgRunNow, nil) })
+	onClick("previewToggle", func() {
+		previewOn = !previewOn
+		show("preview", previewOn)
+		if previewOn {
+			setText("previewToggle", "Hide preview")
+		} else {
+			setText("previewToggle", "Show preview")
+		}
+	})
+}
+
+// drawRunFrame shows a screenshot of the checker browser while a run is in progress.
+func drawRunFrame(f api.Frame) {
+	if !previewOn {
+		return
+	}
+	byID("previewImg").Set("src", "data:image/jpeg;base64,"+f.Data)
+	show("previewWait", false)
 }
 
 func renderStatus() {
@@ -263,6 +287,9 @@ func renderStatus() {
 		setText("stState", "Idle")
 	}
 	byID("runNow").Set("disabled", !online || state.Running)
+	if !state.Running {
+		show("previewWait", true)
+	}
 
 	if state.NextRun != nil && !state.Running {
 		setText("stNext", fmtUntil(*state.NextRun))

@@ -92,7 +92,7 @@ func (h *Hub) Broadcast(typ string, data any) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	for c := range h.clients {
-		c.enqueue(b, typ == api.MsgFrame)
+		c.enqueue(b, typ == api.MsgFrame || typ == api.MsgRunFrame)
 	}
 }
 
@@ -103,7 +103,7 @@ func (c *wsClient) Send(typ string, data any) {
 		log.Println("websocket encode:", err)
 		return
 	}
-	c.enqueue(b, typ == api.MsgFrame)
+	c.enqueue(b, typ == api.MsgFrame || typ == api.MsgRunFrame)
 }
 
 func (c *wsClient) enqueue(b []byte, droppable bool) {

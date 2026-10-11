@@ -14,8 +14,11 @@ import (
 
 	"github.com/chromedp/cdproto/cdp"
 	"github.com/chromedp/cdproto/network"
+	"github.com/chromedp/cdproto/page"
 	"github.com/chromedp/chromedp"
 	"golang.org/x/net/html"
+
+	"ncore_automation/api"
 )
 
 type Checker struct {
@@ -29,6 +32,8 @@ type Checker struct {
 	Cookies []StoredCookie
 	// CookieStatus is set by login to "valid" or "rejected" when Cookies were tried.
 	CookieStatus string
+	// OnFrame, when set, receives live screenshots of the browser during Run.
+	OnFrame func(*api.Frame)
 }
 
 // TestLogin only logs in, to check whether the saved cookies still work.
@@ -48,6 +53,7 @@ func (c *Checker) Run() RunRecord {
 	// Setup context
 	ctx, cancel := c.createContext()
 	defer cancel()
+	c.startScreencast(ctx)
 
 	// Login
 	if err := c.login(ctx); err != nil {
@@ -338,4 +344,26 @@ func (c *Checker) downloadFile(downloadUrl string, fileName string) error {
 
 	c.Logger.Println("File successfully downloaded and saved:", outputPath)
 	return nil
+}
+
+// startScreencast streams JPEG screenshots of the browser to OnFrame.
+func (c *Checker) startScreencast(ctx context.Context) {
+	if c.OnFrame == nil {
+		return
+	}
+	chromedp.ListenTarget(ctx, func(ev interface{}) {
+		e, ok := ev.(*page.EventScreencastFrame)
+		if !ok {
+			return
+		}
+		f := &api.Frame{Data: e.Data}
+		if e.Metadata != nil {
+			f.Width, f.Height = e.Metadata.DeviceWidth, e.Metadata.DeviceHeight
+		}
+		c.OnFrame(f)
+		go chromedp.Run(ctx, page.ScreencastFrameAck(e.SessionID))
+	})
+	if err := chromedp.Run(ctx, page.StartScreencast().WithFormat(page.ScreencastFormatJpeg).WithQuality(50).WithMaxWidth(1024).WithMaxHeight(768)); err != nil {
+		c.Logger.Println("Preview not available:", err)
+	}
 }

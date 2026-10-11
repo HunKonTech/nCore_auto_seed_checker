@@ -42,6 +42,8 @@ type App struct {
 	nextRun time.Time
 	lastRun *RunRecord
 	login   *LoginSession
+	// runFrame is the last preview frame of the running check.
+	runFrame *api.Frame
 	// loginStarting is true while the login browser is being started.
 	loginStarting bool
 }
@@ -105,6 +107,14 @@ func (a *App) newChecker() *Checker {
 		Debug:     a.cfg.Debug,
 		Logger:    a.logger,
 		Cookies:   cookies,
+		OnFrame: func(f *api.Frame) {
+			a.mu.Lock()
+			a.runFrame = f
+			a.mu.Unlock()
+			if a.hub != nil {
+				a.hub.Broadcast(api.MsgRunFrame, f)
+			}
+		},
 	}
 }
 
@@ -177,6 +187,7 @@ func (a *App) runCheck() {
 
 	a.mu.Lock()
 	a.running = false
+	a.runFrame = nil
 	a.lastRun = &record
 	a.mu.Unlock()
 	a.broadcastState()
@@ -272,8 +283,11 @@ func (a *App) onConnect(c *wsClient) {
 	c.Send(api.MsgHistory, a.history.GetRecords())
 	c.Send(api.MsgLog, api.LogLines{Lines: a.logs.Backlog(), Reset: true})
 	a.mu.Lock()
-	login := a.login
+	login, runFrame := a.login, a.runFrame
 	a.mu.Unlock()
+	if runFrame != nil {
+		c.Send(api.MsgRunFrame, runFrame)
+	}
 	if login != nil {
 		if f := login.LastFrame(); f != nil {
 			c.Send(api.MsgFrame, f)

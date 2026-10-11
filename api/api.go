@@ -15,6 +15,7 @@ const (
 	MsgHistoryAdd = "history_add" // RunRecord
 	MsgLog        = "log"         // LogLines
 	MsgFrame      = "frame"       // Frame
+	MsgRunFrame   = "run_frame"   // Frame of the checker browser during a run
 	MsgNotice     = "notice"      // Notice
 )
 
