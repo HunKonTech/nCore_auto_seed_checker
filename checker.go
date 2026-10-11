@@ -24,6 +24,18 @@ type Checker struct {
 	OutputDir string
 	Debug     bool
 	Logger    *log.Logger
+	// Cookies, when set, are used instead of the login form (which has a
+	// reCAPTCHA). User and Pass are only used if nCore rejects them.
+	Cookies []StoredCookie
+	// CookieStatus is set by login to "valid" or "rejected" when Cookies were tried.
+	CookieStatus string
+}
+
+// TestLogin only logs in, to check whether the saved cookies still work.
+func (c *Checker) TestLogin() error {
+	ctx, cancel := c.createContext()
+	defer cancel()
+	return c.login(ctx)
 }
 
 func (c *Checker) Run() RunRecord {
@@ -65,7 +77,8 @@ func (c *Checker) Run() RunRecord {
 	return record
 }
 
-func (c *Checker) createContext() (context.Context, context.CancelFunc) {
+// allocatorOptions are the Chrome flags shared by the checker and the login browser.
+func allocatorOptions(extra ...chromedp.ExecAllocatorOption) []chromedp.ExecAllocatorOption {
 	opts := []chromedp.ExecAllocatorOption{
 		chromedp.NoFirstRun,
 		chromedp.NoDefaultBrowserCheck,
@@ -76,9 +89,12 @@ func (c *Checker) createContext() (context.Context, context.CancelFunc) {
 	if p := os.Getenv("CHROME_PATH"); p != "" {
 		opts = append(opts, chromedp.ExecPath(p))
 	}
-	// If you wanted to see the browser, you'd remove Headless. For now default is headless.
+	return append(opts, extra...)
+}
 
-	allocCtx, cancelAlloc := chromedp.NewExecAllocator(context.Background(), opts...)
+func (c *Checker) createContext() (context.Context, context.CancelFunc) {
+	// If you wanted to see the browser, you'd remove Headless. For now default is headless.
+	allocCtx, cancelAlloc := chromedp.NewExecAllocator(context.Background(), allocatorOptions()...)
 	ctx, cancelCtx := chromedp.NewContext(allocCtx, chromedp.WithLogf(c.Logger.Printf))
 
 	// Separate cancel function to handle both
@@ -97,26 +113,30 @@ func (c *Checker) createContext() (context.Context, context.CancelFunc) {
 }
 
 func (c *Checker) login(ctx context.Context) error {
-	var body, url string
-	if raw := os.Getenv("NCORE_COOKIE"); raw != "" {
+	if len(c.Cookies) > 0 {
 		c.Logger.Println("Logging in with session cookie...")
-		err := chromedp.Run(ctx, chromedp.ActionFunc(func(ctx context.Context) error {
-			for _, part := range strings.Split(raw, ";") {
-				kv := strings.SplitN(strings.TrimSpace(part), "=", 2)
-				if len(kv) != 2 {
-					continue
-				}
-				if err := network.SetCookie(kv[0], kv[1]).WithDomain("ncore.pro").WithPath("/").WithSecure(true).Do(ctx); err != nil {
-					return err
-				}
-			}
-			return nil
-		}))
+		err := chromedp.Run(ctx, network.SetCookies(cookieParams(c.Cookies)))
 		if err != nil {
 			return err
 		}
-		return c.verifyLogin(ctx)
+		if err = c.verifyLogin(ctx); err == nil {
+			c.CookieStatus = "valid"
+			return nil
+		}
+		c.CookieStatus = "rejected"
+		if c.User == "" || c.Pass == "" {
+			return fmt.Errorf("session cookie rejected, log in again on the Settings page: %w", err)
+		}
+		c.Logger.Println("Session cookie rejected, falling back to username and password:", err)
+		if err := chromedp.Run(ctx, network.ClearBrowserCookies()); err != nil {
+			return err
+		}
 	}
+	if c.User == "" || c.Pass == "" {
+		return fmt.Errorf("no session cookie or username/password configured")
+	}
+
+	var body, url string
 	c.Logger.Println("Attempting to log in...")
 	err := chromedp.Run(ctx,
 		chromedp.Navigate(loginUrl),
@@ -148,8 +168,8 @@ func (c *Checker) verifyLogin(ctx context.Context) error {
 	); err != nil {
 		return err
 	}
-	if strings.Contains(url, "login.php") || !strings.Contains(body, c.User) {
-		return fmt.Errorf("login failed, landed on %s (see login_debug.html)", url)
+	if strings.Contains(url, "login.php") || (c.User != "" && !strings.Contains(body, c.User)) {
+		return fmt.Errorf("login failed, landed on %s", url)
 	}
 	c.Logger.Println("Login successful.")
 	return nil

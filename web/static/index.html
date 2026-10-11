@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>nCore Seed Checker</title>
+    <style>
+        :root {
+            --bg-color: #0f172a;
+            --card-bg: #1e293b;
+            --text-primary: #f8fafc;
+            --text-secondary: #94a3b8;
+            --accent: #38bdf8;
+            --success: #22c55e;
+            --warning: #f59e0b;
+            --error: #ef4444;
+            --border: #334155;
+        }
+        * { box-sizing: border-box; }
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-primary);
+            margin: 0;
+            padding: 2rem;
+            line-height: 1.5;
+        }
+        .container { max-width: 1240px; margin: 0 auto; }
+        header {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            flex-wrap: wrap;
+            margin-bottom: 1.5rem;
+            border-bottom: 1px solid var(--border);
+            padding-bottom: 1rem;
+        }
+        h1 { margin: 0; font-size: 1.8rem; font-weight: 700; color: var(--accent); flex: 1; }
+        h2 { margin-top: 0; font-size: 1.2rem; }
+
+        nav { display: flex; gap: 0.25rem; }
+        nav button { background: transparent; border-color: transparent; color: var(--text-secondary); }
+        nav button.active { background: var(--card-bg); border-color: var(--border); color: var(--text-primary); }
+
+        .conn { font-size: 0.8rem; color: var(--text-secondary); display: flex; align-items: center; gap: 6px; }
+        .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--error); }
+        .conn.online .dot { background: var(--success); }
+
+        .card {
+            background: var(--card-bg);
+            border-radius: 12px;
+            padding: 1.5rem;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            margin-bottom: 1.5rem;
+            border: 1px solid var(--border);
+        }
+        .hidden { display: none !important; }
+        .muted { color: var(--text-secondary); font-size: 0.9rem; }
+        .row { display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap; }
+        .spacer { flex: 1; }
+
+        button {
+            font: inherit;
+            font-size: 0.9rem;
+            font-weight: 600;
+            padding: 6px 14px;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+            background: rgba(255,255,255,0.06);
+            color: var(--text-primary);
+            cursor: pointer;
+        }
+        button:hover:not(:disabled) { border-color: var(--accent); }
+        button:disabled { opacity: 0.5; cursor: default; }
+        button.primary { background: var(--accent); border-color: var(--accent); color: #0f172a; }
+        button.danger:hover:not(:disabled) { border-color: var(--error); color: var(--error); }
+
+        input[type=text], textarea {
+            font: inherit;
+            font-size: 0.9rem;
+            width: 100%;
+            padding: 8px 10px;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+            background: var(--bg-color);
+            color: var(--text-primary);
+        }
+        input:disabled { opacity: 0.6; }
+        label { display: block; font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 4px; }
+        .field { margin-bottom: 1rem; }
+
+        .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; margin-bottom: 1rem; }
+        .stat .label { font-size: 0.8rem; color: var(--text-secondary); }
+        .stat .value { font-size: 1.05rem; font-weight: 600; }
+
+        .table-wrap { overflow-x: auto; }
+        table { width: 100%; border-collapse: collapse; text-align: left; }
+        th {
+            background: rgba(255,255,255,0.05);
+            padding: 12px;
+            color: var(--text-secondary);
+            font-weight: 600;
+            font-size: 0.9rem;
+            border-bottom: 1px solid var(--border);
+        }
+        td { padding: 12px; border-bottom: 1px solid var(--border); font-size: 0.95rem; vertical-align: top; }
+        tr:last-child td { border-bottom: none; }
+
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            padding: 4px 8px;
+            border-radius: 9999px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+        .status-success { background: rgba(34, 197, 94, 0.1); color: var(--success); }
+        .status-error { background: rgba(239, 68, 68, 0.1); color: var(--error); }
+        .status-warning { background: rgba(245, 158, 11, 0.1); color: var(--warning); }
+        .status-info { background: rgba(56, 189, 248, 0.1); color: var(--accent); }
+
+        .downloads-list { list-style: none; padding: 0; margin: 0; font-size: 0.85rem; color: var(--text-secondary); }
+        .downloads-list li { margin-bottom: 2px; }
+        .time-cell { color: var(--text-secondary); white-space: nowrap; }
+
+        #log {
+            margin: 0;
+            height: 70vh;
+            overflow: auto;
+            font: 0.8rem/1.45 ui-monospace, SFMono-Regular, Menlo, monospace;
+            white-space: pre-wrap;
+            word-break: break-all;
+            color: var(--text-secondary);
+        }
+
+        .browser { margin-top: 1rem; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+        .browser-bar { display: flex; gap: 0.5rem; align-items: center; padding: 8px; background: var(--bg-color); border-bottom: 1px solid var(--border); }
+        .browser-url {
+            flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+            font-size: 0.85rem; color: var(--text-secondary); padding: 4px 10px; border-radius: 6px; background: var(--card-bg);
+        }
+        .screen { position: relative; background: #fff; }
+        .screen canvas { display: block; width: 100%; height: auto; cursor: default; outline: none; }
+        .screen .placeholder {
+            position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+            background: var(--bg-color); color: var(--text-secondary);
+        }
+        #kbd { position: absolute; left: 0; top: 0; width: 1px; height: 1px; opacity: 0; resize: none; border: 0; padding: 0; }
+
+        #notices { position: fixed; right: 1rem; bottom: 1rem; display: flex; flex-direction: column; gap: 0.5rem; z-index: 10; max-width: 420px; }
+        .notice { padding: 10px 14px; border-radius: 8px; background: var(--card-bg); border: 1px solid var(--border); box-shadow: 0 4px 12px rgba(0,0,0,0.3); font-size: 0.9rem; }
+        .notice.success { border-color: var(--success); }
+        .notice.error { border-color: var(--error); }
+
+        #boot { padding: 2rem; text-align: center; color: var(--text-secondary); }
+
+        @media (max-width: 640px) {
+            body { padding: 1rem; }
+            th, td { padding: 8px; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>nCore Seed Checker</h1>
+            <nav id="tabs">
+                <button data-tab="dashboard" class="active">Dashboard</button>
+                <button data-tab="log">Log</button>
+                <button data-tab="settings">Settings</button>
+            </nav>
+            <div class="conn" id="conn"><span class="dot"></span><span id="connText">Connecting...</span></div>
+        </header>
+
+        <div id="boot">Loading...</div>
+
+        <!-- Dashboard -->
+        <section id="tab-dashboard" class="hidden">
+            <div class="card">
+                <div class="row" style="margin-bottom:1rem">
+                    <h2 style="margin:0">Status</h2>
+                    <span class="spacer"></span>
+                    <button id="runNow" class="primary">Run now</button>
+                </div>
+                <div class="stats">
+                    <div class="stat"><div class="label">State</div><div class="value" id="stState">-</div></div>
+                    <div class="stat"><div class="label">Last run</div><div class="value" id="stLast">-</div></div>
+                    <div class="stat"><div class="label">Next run</div><div class="value" id="stNext">-</div></div>
+                    <div class="stat"><div class="label">Session cookie</div><div class="value" id="stCookie">-</div></div>
+                </div>
+                <div class="muted" id="stLastSummary"></div>
+            </div>
+
+            <div class="card">
+                <h2>Run History</h2>
+                <div id="historyEmpty" class="muted">No history found.</div>
+                <div class="table-wrap">
+                    <table id="historyTable" class="hidden">
+                        <thead>
+                            <tr>
+                                <th width="20%">Timestamp</th>
+                                <th width="10%">Duration</th>
+                                <th width="10%">Found</th>
+                                <th width="10%">Downloaded</th>
+                                <th width="15%">Status</th>
+                                <th>Downloads</th>
+                            </tr>
+                        </thead>
+                        <tbody id="historyBody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- Log -->
+        <section id="tab-log" class="hidden">
+            <div class="card">
+                <div class="row" style="margin-bottom:1rem">
+                    <h2 style="margin:0">Live log</h2>
+                    <span class="spacer"></span>
+                    <label class="row" style="margin:0"><input type="checkbox" id="logFollow" checked> Follow</label>
+                </div>
+                <pre id="log"></pre>
+            </div>
+        </section>
+
+        <!-- Settings -->
+        <section id="tab-settings" class="hidden">
+            <div class="card">
+                <h2>nCore login</h2>
+                <p class="muted" style="margin-top:0">
+                    The login form has a reCAPTCHA, so the checker logs in with a saved session cookie instead.
+                    Log in once in the browser below; the cookie is saved automatically when you are in.
+                </p>
+                <div class="stats">
+                    <div class="stat"><div class="label">Cookie</div><div class="value" id="ckStatus">-</div></div>
+                    <div class="stat"><div class="label">Saved</div><div class="value" id="ckSaved">-</div></div>
+                    <div class="stat"><div class="label">Expires</div><div class="value" id="ckExpires">-</div></div>
+                    <div class="stat"><div class="label">Last checked</div><div class="value" id="ckChecked">-</div></div>
+                </div>
+                <div class="muted" id="ckNames" style="margin-bottom:1rem"></div>
+                <div class="row">
+                    <button id="loginStart" class="primary">Log in to nCore</button>
+                    <button id="cookieTest">Test cookie</button>
+                    <button id="cookieClear" class="danger">Delete cookie</button>
+                </div>
+
+                <div id="browser" class="browser hidden">
+                    <div class="browser-bar">
+                        <button id="navBack" title="Back">&larr;</button>
+                        <button id="navReload" title="Reload">&#x21bb;</button>
+                        <button id="navHome" title="Login page">Login page</button>
+                        <div class="browser-url" id="browserUrl"></div>
+                        <button id="loginCapture" title="Save the cookies now, if they were not saved automatically">Save cookie</button>
+                        <button id="loginStop" class="danger">Close</button>
+                    </div>
+                    <div class="muted" id="browserMsg" style="padding:6px 10px"></div>
+                    <div class="screen">
+                        <canvas id="screen" width="1200" height="860"></canvas>
+                        <div class="placeholder" id="screenWait">Starting browser...</div>
+                        <textarea id="kbd" autocomplete="off" autocapitalize="off" spellcheck="false"></textarea>
+                    </div>
+                </div>
+
+                <details style="margin-top:1rem">
+                    <summary class="muted" style="cursor:pointer">Paste a cookie manually</summary>
+                    <p class="muted">Copy the <code>Cookie</code> header of an nCore request from your own browser's developer tools (format: <code>name=value; name2=value2</code>).</p>
+                    <div class="field"><textarea id="cookieInput" rows="3"></textarea></div>
+                    <button id="cookieSave">Save cookie</button>
+                </details>
+            </div>
+
+            <div class="card">
+                <h2>General</h2>
+                <div class="field">
+                    <label for="setOutputDir">Torrent output directory</label>
+                    <input type="text" id="setOutputDir" placeholder="./torrents">
+                    <div class="muted hidden" id="setOutputDirLocked">Set with the -o flag.</div>
+                </div>
+                <div class="field">
+                    <label for="setInterval">Check interval (e.g. 30m, 1h; empty or 0 = only on "Run now")</label>
+                    <input type="text" id="setInterval" placeholder="30m">
+                    <div class="muted hidden" id="setIntervalLocked">Set with the -interval flag.</div>
+                </div>
+                <button id="settingsSave" class="primary">Save</button>
+            </div>
+        </section>
+    </div>
+
+    <div id="notices"></div>
+
+    <script src="wasm_exec.js"></script>
+    <script>
+        const go = new Go();
+        WebAssembly.instantiateStreaming(fetch('app.wasm'), go.importObject)
+            .then(r => go.run(r.instance))
+            .catch(err => {
+                document.getElementById('boot').textContent = 'Failed to load the web interface: ' + err;
+                console.error(err);
+            });
+    </script>
+</body>
+</html>

@@ -7,7 +7,6 @@ import (
 	"log"
 	"os"
 	"strings"
-	"time"
 
 	"golang.org/x/net/html"
 )
@@ -27,20 +26,43 @@ func main() {
 	port := flag.Int("port", 8080, "Web server port")
 	flag.Parse()
 
-	if (*user == "" || *pass == "" || *outDir == "") && !*webMode {
-		fmt.Println("username, password and output directory are required")
-		flag.Usage()
-		return
+	cfg := Config{
+		User:       *user,
+		Pass:       *pass,
+		Debug:      *debug,
+		OutputDir:  *outDir,
+		Interval:   *interval,
+		EnvCookies: parseCookieString(os.Getenv("NCORE_COOKIE")),
+	}
+	flag.Visit(func(f *flag.Flag) {
+		if f.Name == "interval" {
+			cfg.IntervalSet = true
+		}
+	})
+
+	settings, err := LoadSettings()
+	if err != nil {
+		fmt.Println("Error reading", settingsFile+":", err)
+		os.Exit(1)
 	}
 
-	// If just web mode, we might need config passed in, or we just show history.
-	// For now, let's assume we want to run the checker UNLESS web mode is on?
-	// Or maybe web mode is a separate blocking call.
+	// Without the web interface everything has to come from the command line
+	// (or a cookie saved earlier from the web interface).
+	if !*webMode {
+		hasCookie := len(cfg.EnvCookies) > 0 || len(settings.Get().Cookies) > 0
+		if ((*user == "" || *pass == "") && !hasCookie) || (*outDir == "" && settings.Get().OutputDir == "") {
+			fmt.Println("username and password (or a session cookie) and output directory are required")
+			flag.Usage()
+			return
+		}
+	}
+
+	var hub *Hub
 	if *webMode {
-		go startWebServer(*port) // Run web server in a goroutine
+		hub = NewHub()
 	}
-
-	logger := log.New(os.Stdout, "", log.LstdFlags)
+	logs := &LogStream{hub: hub}
+	out := io.MultiWriter(os.Stdout, logs)
 	if *debug {
 		logFile, err := os.OpenFile("log.txt", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
 		if err != nil {
@@ -48,48 +70,32 @@ func main() {
 			os.Exit(1)
 		}
 		defer logFile.Close()
-		logger.SetOutput(io.MultiWriter(os.Stdout, logFile))
+		out = io.MultiWriter(out, logFile)
+	}
+	logger := log.New(out, "", log.LstdFlags)
+	log.SetOutput(out)
+
+	history, err := NewHistoryManager()
+	if err != nil {
+		logger.Println("Failed to load history manager:", err)
+		os.Exit(1)
 	}
 
-	checker := &Checker{
-		User:      *user,
-		Pass:      *pass,
-		OutputDir: *outDir,
-		Debug:     *debug,
-		Logger:    logger,
-	}
-
+	app := NewApp(cfg, logger, hub, logs, history, settings)
 	logger.Println("Starting application...")
 
-	// Helper to run one check
-	runCheck := func() {
-		record := checker.Run()
-		hm, err := NewHistoryManager()
-		if err != nil {
-			logger.Println("Failed to load history manager:", err)
-		} else {
-			if err := hm.SaveRecord(record); err != nil {
-				logger.Println("Failed to save run record:", err)
-			} else {
-				logger.Println("Run recorded to history.json")
-			}
-		}
+	if *webMode {
+		go startWebServer(*port, hub) // Run web server in a goroutine
 	}
 
-	// Always run once immediately
-	runCheck()
-
-	if *interval > 0 {
-		logger.Printf("Running in loop mode. Checking every %v...", *interval)
-		ticker := time.NewTicker(*interval)
-		defer ticker.Stop()
-		for range ticker.C {
-			runCheck()
+	if *webMode || *interval > 0 {
+		if d := app.interval(); d > 0 {
+			logger.Printf("Running in loop mode. Checking every %v...", d)
 		}
-	} else if *webMode {
-		// If web mode is on but no interval, run once then block to keep server alive
-		select {}
+		app.Loop()
+		return
 	}
+	app.runCheck()
 }
 
 // Helper needed for both

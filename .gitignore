@@ -1,3 +1,8 @@
 ncore_automation.exe
 log.txt
 history.json
+settings.json
+login_debug.html
+# Built by `go generate`
+web/static/app.wasm
+web/static/wasm_exec.js

@@ -4,20 +4,14 @@ import (
 	"encoding/json"
 	"os"
 	"sync"
-	"time"
+
+	"ncore_automation/api"
 )
 
 const historyFile = "history.json"
 
 // RunRecord represents a single execution of the checker
-type RunRecord struct {
-	Timestamp       time.Time `json:"timestamp"`
-	Duration        string    `json:"duration"`
-	ItemsFound      int       `json:"items_found"`
-	ItemsDownloaded int       `json:"items_downloaded"`
-	LogSummary      string    `json:"log_summary"`
-	Downloads       []string  `json:"downloads"`
-}
+type RunRecord = api.RunRecord
 
 // HistoryManager handles reading and writing the history file
 type HistoryManager struct {
