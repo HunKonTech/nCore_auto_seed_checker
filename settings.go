@@ -12,7 +12,7 @@ import (
 	"github.com/chromedp/cdproto/network"
 )
 
-// settingsFile holds the session cookie, so it is written with 0600.
+// settingsFile holds the session cookie and login credentials, so it is written with 0600.
 const settingsFile = "settings.json"
 
 // StoredCookie is an nCore cookie as captured from the login browser.
@@ -32,6 +32,8 @@ type Settings struct {
 	OutputDir       string         `json:"output_dir,omitempty"`
 	Interval        string         `json:"interval,omitempty"`
 	Cookies         []StoredCookie `json:"cookies,omitempty"`
+	Username        string         `json:"username,omitempty"` // write-only from the web interface
+	Password        string         `json:"password,omitempty"` // write-only from the web interface
 	CookieSavedAt   time.Time      `json:"cookie_saved_at,omitempty"`
 	CookieStatus    string         `json:"cookie_status,omitempty"`
 	CookieCheckedAt time.Time      `json:"cookie_checked_at,omitempty"`

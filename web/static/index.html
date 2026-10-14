@@ -272,6 +272,18 @@
                 </div>
 
                 <details style="margin-top:1rem">
+                    <summary class="muted" style="cursor:pointer">Username and password (fallback)</summary>
+                    <p class="muted">Used when the cookie is rejected. nCore's reCAPTCHA can make this fail, so the cookie stays the main way in. The values are stored on the server and can only be replaced or deleted, never shown.</p>
+                    <div class="muted" id="loginPwState" style="margin-bottom:.5rem"></div>
+                    <div class="field"><input id="loginUser" type="text" placeholder="Username" autocomplete="off"></div>
+                    <div class="field"><input id="loginPass" type="password" placeholder="Password" autocomplete="new-password"></div>
+                    <div class="row">
+                        <button id="loginPwSave">Save</button>
+                        <button id="loginPwClear" class="danger">Delete</button>
+                    </div>
+                </details>
+
+                <details style="margin-top:1rem">
                     <summary class="muted" style="cursor:pointer">Paste a cookie manually</summary>
                     <p class="muted">Copy the <code>Cookie</code> header of an nCore request from your own browser's developer tools (format: <code>name=value; name2=value2</code>).</p>
                     <div class="field"><textarea id="cookieInput" rows="3"></textarea></div>

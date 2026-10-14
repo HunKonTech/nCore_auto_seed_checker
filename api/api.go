@@ -25,6 +25,8 @@ const (
 	MsgSaveSettings = "save_settings" // SettingsUpdate
 	MsgSetCookie    = "set_cookie"    // CookieInput
 	MsgClearCookie  = "clear_cookie"
+	MsgSetLogin     = "set_login" // LoginInput
+	MsgClearLogin   = "clear_login"
 	MsgTestCookie   = "test_cookie"
 	MsgLoginStart   = "login_start"
 	MsgLoginStop    = "login_stop"
@@ -68,7 +70,8 @@ type SettingsView struct {
 	OutputDirLocked bool       `json:"output_dir_locked"` // set by the -o flag
 	Interval        string     `json:"interval"`
 	IntervalLocked  bool       `json:"interval_locked"` // set by the -interval flag
-	HasPassword     bool       `json:"has_password"`    // -u and -p were given
+	HasPassword     bool       `json:"has_password"`    // a username and password are set
+	LoginSource     string     `json:"login_source,omitempty"` // "flags" (-u/-p) or "saved"; never the values
 	Cookie          CookieInfo `json:"cookie"`
 }
 
@@ -118,6 +121,13 @@ type SettingsUpdate struct {
 // CookieInput is a manually pasted "name=value; name2=value2" cookie string.
 type CookieInput struct {
 	Cookie string `json:"cookie"`
+}
+
+// LoginInput is a username and password to fall back on when the cookie is
+// rejected. It only travels from the browser to the server, never back.
+type LoginInput struct {
+	Username string `json:"username"`
+	Password string `json:"password"`
 }
 
 // NavAction is "back", "reload" or "home" for the remote login browser.

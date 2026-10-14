@@ -405,6 +405,20 @@ func setupSettings() {
 		send(api.MsgSetCookie, api.CookieInput{Cookie: in.Get("value").String()})
 		in.Set("value", "")
 	})
+	onClick("loginPwSave", func() {
+		user, pass := byID("loginUser"), byID("loginPass")
+		send(api.MsgSetLogin, api.LoginInput{
+			Username: user.Get("value").String(),
+			Password: pass.Get("value").String(),
+		})
+		user.Set("value", "")
+		pass.Set("value", "")
+	})
+	onClick("loginPwClear", func() {
+		if js.Global().Call("confirm", "Delete the saved username and password?").Bool() {
+			send(api.MsgClearLogin, nil)
+		}
+	})
 	onClick("cookieTest", func() { send(api.MsgTestCookie, nil) })
 	onClick("cookieClear", func() {
 		if js.Global().Call("confirm", "Delete the saved session cookie?").Bool() {
@@ -444,10 +458,24 @@ func renderSettings() {
 	if len(c.Names) > 0 {
 		setText("ckNames", "Cookies: "+strings.Join(c.Names, ", "))
 	} else if s.HasPassword {
-		setText("ckNames", "No cookie saved: the username and password from the command line are used, which fails when nCore asks for a reCAPTCHA.")
+		setText("ckNames", "No cookie saved: the saved or command line username and password are used, which fails when nCore asks for a reCAPTCHA.")
 	} else {
 		setText("ckNames", "")
 	}
+
+	switch s.LoginSource {
+	case "flags":
+		setText("loginPwState", "Set on the command line (-u/-p), not changeable here.")
+	case "saved":
+		setText("loginPwState", "A username and password are saved.")
+	default:
+		setText("loginPwState", "Nothing saved.")
+	}
+	locked := s.LoginSource == "flags"
+	byID("loginUser").Set("disabled", locked)
+	byID("loginPass").Set("disabled", locked)
+	byID("loginPwSave").Set("disabled", locked)
+	byID("loginPwClear").Set("disabled", s.LoginSource != "saved")
 
 	byID("cookieTest").Set("disabled", !c.Present || state.Testing)
 	byID("cookieClear").Set("disabled", c.Source != "saved")

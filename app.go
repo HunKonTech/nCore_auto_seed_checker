@@ -98,11 +98,29 @@ func (a *App) cookies() ([]StoredCookie, string) {
 	return nil, ""
 }
 
+// credentials returns the username and password to fall back on: the -u/-p
+// flags, or else the ones saved from the Settings page.
+func (a *App) credentials() (user, pass, src string) {
+	if a.cfg.User != "" && a.cfg.Pass != "" {
+		return a.cfg.User, a.cfg.Pass, "flags"
+	}
+	if s := a.settings.Get(); s.Username != "" && s.Password != "" {
+		return s.Username, s.Password, "saved"
+	}
+	return "", "", ""
+}
+
+func (a *App) hasCredentials() bool {
+	u, p, _ := a.credentials()
+	return u != "" && p != ""
+}
+
 func (a *App) newChecker() *Checker {
 	cookies, _ := a.cookies()
+	user, pass, _ := a.credentials()
 	return &Checker{
-		User:      a.cfg.User,
-		Pass:      a.cfg.Pass,
+		User:      user,
+		Pass:      pass,
 		OutputDir: a.outputDir(),
 		Debug:     a.cfg.Debug,
 		Logger:    a.logger,
@@ -123,7 +141,7 @@ func (a *App) ready() error {
 	if a.outputDir() == "" {
 		return errors.New("no output directory set (use -o or the Settings page)")
 	}
-	if c, _ := a.cookies(); len(c) == 0 && (a.cfg.User == "" || a.cfg.Pass == "") {
+	if c, _ := a.cookies(); len(c) == 0 && !a.hasCredentials() {
 		return errors.New("not logged in: log in on the Settings page, or use -u and -p")
 	}
 	return nil
@@ -230,7 +248,7 @@ func (a *App) State() api.State {
 		OutputDir:       a.outputDir(),
 		OutputDirLocked: a.cfg.OutputDir != "",
 		IntervalLocked:  a.cfg.IntervalSet,
-		HasPassword:     a.cfg.User != "" && a.cfg.Pass != "",
+		HasPassword:     a.hasCredentials(),
 		Cookie: api.CookieInfo{
 			Present:   len(cookies) > 0,
 			Source:    src,
@@ -238,6 +256,7 @@ func (a *App) State() api.State {
 			ExpiresAt: earliestExpiry(cookies),
 		},
 	}
+	_, _, view.LoginSource = a.credentials()
 	if d := a.interval(); d > 0 {
 		view.Interval = d.String()
 	}
@@ -366,6 +385,33 @@ func (a *App) handle(msg api.Envelope) error {
 			s.CookieSavedAt = time.Time{}
 			s.CookieStatus = ""
 			s.CookieCheckedAt = time.Time{}
+		})
+		a.broadcastState()
+		return err
+
+	case api.MsgSetLogin:
+		var in api.LoginInput
+		if err := decode(&in); err != nil {
+			return err
+		}
+		if in.Username == "" || in.Password == "" {
+			return errors.New("both a username and a password are required")
+		}
+		err := a.settings.Update(func(s *Settings) {
+			s.Username = in.Username
+			s.Password = in.Password
+		})
+		if err != nil {
+			return err
+		}
+		a.broadcastState()
+		a.notify("success", "Username and password saved.")
+		return nil
+
+	case api.MsgClearLogin:
+		err := a.settings.Update(func(s *Settings) {
+			s.Username = ""
+			s.Password = ""
 		})
 		a.broadcastState()
 		return err
