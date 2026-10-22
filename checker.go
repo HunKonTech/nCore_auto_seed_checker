@@ -196,7 +196,7 @@ func (c *Checker) checkActivity(ctx context.Context) ([]string, error) {
 	c.Logger.Println("Analyzing HTML to find torrents with 'Stopped' status...")
 	var rows []*cdp.Node
 	err = chromedp.Run(ctx,
-		chromedp.Nodes(`div[class^="hnr_all"]`, &rows, chromedp.ByQueryAll),
+		chromedp.Nodes(`div[class^="hnr_all"]`, &rows, chromedp.ByQueryAll, chromedp.AtLeast(0)),
 	)
 	if err != nil {
 		return nil, err
@@ -289,7 +289,7 @@ func (c *Checker) downloadTorrent(ctx context.Context, torrentUrl string, match 
 		c.Logger.Println("Opening torrent page:", torrentUrl, "Torrent download link:", downloadUrl, "file name:", rawFileName)
 
 		finalName := rawFileName + ".torrent"
-		if err := c.downloadFile(downloadUrl, finalName); err != nil {
+		if err := c.downloadFile(ctx, downloadUrl, finalName); err != nil {
 			return "", err
 		}
 		return finalName, nil
@@ -297,7 +297,7 @@ func (c *Checker) downloadTorrent(ctx context.Context, torrentUrl string, match 
 	return "", fmt.Errorf("download link not found")
 }
 
-func (c *Checker) downloadFile(downloadUrl string, fileName string) error {
+func (c *Checker) downloadFile(ctx context.Context, downloadUrl string, fileName string) error {
 	sanitizeFileName := func(name string) string {
 		name = strings.ReplaceAll(name, "?", "_")
 		name = strings.ReplaceAll(name, "&", "_")
@@ -306,10 +306,23 @@ func (c *Checker) downloadFile(downloadUrl string, fileName string) error {
 	}
 	c.Logger.Println("Downloading file:", downloadUrl)
 	client := &http.Client{}
-	req, err := http.NewRequest("GET", downloadUrl, nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", downloadUrl, nil)
 	if err != nil {
 		c.Logger.Println("Error:", err)
 		return err
+	}
+
+	// Reuse the browser's session (cookie or password login) for the download.
+	var cookies []*network.Cookie
+	if err := chromedp.Run(ctx, chromedp.ActionFunc(func(ctx context.Context) (err error) {
+		cookies, err = network.GetCookies().WithURLs([]string{downloadUrl}).Do(ctx)
+		return err
+	})); err != nil {
+		c.Logger.Println("Error reading session cookies:", err)
+		return err
+	}
+	for _, ck := range cookies {
+		req.AddCookie(&http.Cookie{Name: ck.Name, Value: ck.Value})
 	}
 
 	resp, err := client.Do(req)
